@@ -1,118 +1,37 @@
-<style>
-  .mlv { --mlv-bg:#f3f1ec; --mlv-ui:#2f3a2c;
-    position:relative; width:100%; max-width:1200px; margin:0 auto;
-    height:100vh; height:100dvh; background:var(--mlv-bg); overflow:hidden;
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; }
-  @media screen and (max-width:640px){ .mlv{ max-width:none; } }
+name: PDF -> страницы
 
-  .mlv-track{ display:flex; height:100%; overflow-x:auto; overflow-y:hidden;
-    scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
-  .mlv-track::-webkit-scrollbar{ display:none; }
-  .mlv.is-zoomed .mlv-track{ overflow-x:hidden; scroll-snap-type:none; }
+on:
+  push:
+    paths:
+      - '**.pdf'
+  workflow_dispatch:
 
-  .mlv-slide{ flex:0 0 100%; width:100%; height:100%; scroll-snap-align:center;
-    overflow:hidden; display:flex; align-items:center; justify-content:center; }
-  .mlv-slide.is-open{ overflow:auto; -webkit-overflow-scrolling:touch;
-    align-items:flex-start; justify-content:flex-start; }
+permissions:
+  contents: write
 
-  .mlv-slide img{ width:100%; height:100%; object-fit:contain; object-position:center;
-    display:block; cursor:zoom-in; user-select:none; -webkit-user-drag:none; }
-  .mlv-slide.is-open img{ width:250%; height:auto; max-width:none;
-    object-fit:none; cursor:zoom-out; }
-  @media screen and (min-width:641px){ .mlv-slide.is-open img{ width:180%; } }
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-  .mlv-nav{ position:absolute; top:50%; transform:translateY(-50%); z-index:5;
-    width:44px; height:44px; border:none; border-radius:50%; cursor:pointer;
-    background:rgba(255,255,255,.82); color:var(--mlv-ui); font-size:20px; line-height:44px;
-    box-shadow:0 2px 10px rgba(0,0,0,.14); transition:opacity .2s; padding:0; }
-  .mlv-nav:disabled{ opacity:0; pointer-events:none; }
-  .mlv-prev{ left:12px; } .mlv-next{ right:12px; }
-  .mlv.is-zoomed .mlv-nav{ opacity:0; pointer-events:none; }
-  @media (hover:none){ .mlv-nav{ display:none; } }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-  .mlv-bar{ position:absolute; left:50%; bottom:14px; transform:translateX(-50%); z-index:5;
-    display:flex; align-items:center; gap:14px; padding:7px 16px; border-radius:100px;
-    background:rgba(255,255,255,.88); box-shadow:0 2px 10px rgba(0,0,0,.14);
-    font-size:13px; color:var(--mlv-ui); backdrop-filter:blur(6px); }
-  .mlv-bar a{ color:var(--mlv-ui); text-decoration:none; border-bottom:1px solid rgba(47,58,44,.35); }
-  .mlv-dots{ display:flex; gap:6px; }
-  .mlv-dot{ width:6px; height:6px; border-radius:50%; background:rgba(47,58,44,.25);
-    border:none; padding:0; cursor:pointer; transition:background .2s; }
-  .mlv-dot.is-on{ background:var(--mlv-ui); }
-</style>
+      - run: pip install pymupdf
 
-<div class="mlv" id="mlv">
-  <div class="mlv-track" id="mlvTrack"></div>
-  <button class="mlv-nav mlv-prev" id="mlvPrev" aria-label="Назад">‹</button>
-  <button class="mlv-nav mlv-next" id="mlvNext" aria-label="Вперёд">›</button>
-  <div class="mlv-bar">
-    <span id="mlvCount">1 / 7</span>
-    <span class="mlv-dots" id="mlvDots"></span>
-    <a href="https://raw.githack.com/baigulovagency/maslovka/main/%D0%A3%D1%81%D0%BB%D0%BE%D0%B2%D0%B8%D1%8F%20%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D0%B4%D0%B5%D0%BD%D0%B8%D1%8F%20%D0%BC%D0%B5%D1%80%D0%BE%D0%BF%D1%80%D0%B8%D1%8F%D1%82%D0%B8%D0%B9%202%D0%BA27%20%D0%9C%D0%B0%D1%81%D0%BB%D0%BE%D0%B2%D0%BA%D0%B0.pdf" target="_blank" rel="noopener">Скачать PDF</a>
-  </div>
-</div>
+      - name: Рендер страниц
+        run: python scripts/render.py
 
-<script>
-(function(){
-  var BASE = 'https://cdn.jsdelivr.net/gh/baigulovagency/maslovka@main/pages/';
-  var PAGES = 7;
-  var root=document.getElementById('mlv'), track=document.getElementById('mlvTrack'),
-      prev=document.getElementById('mlvPrev'), next=document.getElementById('mlvNext'),
-      count=document.getElementById('mlvCount'), dots=document.getElementById('mlvDots');
-  var cur=0;
-
-  for(var i=1;i<=PAGES;i++){
-    var s=document.createElement('div'); s.className='mlv-slide';
-    var im=document.createElement('img');
-    im.src=BASE+('0'+i).slice(-2)+'.webp';
-    im.alt='Страница '+i;
-    im.loading = i<=2 ? 'eager' : 'lazy';
-    im.decoding='async';
-    s.appendChild(im); track.appendChild(s);
-    var d=document.createElement('button'); d.className='mlv-dot'+(i===1?' is-on':'');
-    d.setAttribute('aria-label','Страница '+i);
-    (function(n){ d.addEventListener('click',function(){ go(n); }); })(i-1);
-    dots.appendChild(d);
-  }
-  var slides=[].slice.call(track.children);
-
-  function go(n){
-    n=Math.max(0,Math.min(PAGES-1,n));
-    track.scrollTo({left:n*track.clientWidth, behavior:'smooth'});
-  }
-  function sync(){
-    var n=Math.round(track.scrollLeft/track.clientWidth);
-    if(n===cur) return;
-    cur=n;
-    count.textContent=(n+1)+' / '+PAGES;
-    [].forEach.call(dots.children,function(d,i){ d.classList.toggle('is-on',i===n); });
-    prev.disabled=(n===0); next.disabled=(n===PAGES-1);
-  }
-  var tick;
-  track.addEventListener('scroll',function(){ clearTimeout(tick); tick=setTimeout(sync,60); },{passive:true});
-  prev.addEventListener('click',function(){ go(cur-1); });
-  next.addEventListener('click',function(){ go(cur+1); });
-  prev.disabled=true;
-
-  slides.forEach(function(s){
-    s.querySelector('img').addEventListener('click',function(e){
-      var open=s.classList.toggle('is-open');
-      root.classList.toggle('is-zoomed',open);
-      if(open){
-        var r=s.getBoundingClientRect();
-        s.scrollLeft=(s.scrollWidth-r.width)/2;
-        s.scrollTop=Math.max(0,(e.clientY-r.top)/r.height*s.scrollHeight-r.height/2);
-      } else { s.scrollTop=0; s.scrollLeft=0; }
-    });
-  });
-
-  document.addEventListener('keydown',function(e){
-    if(!root.getBoundingClientRect().height) return;
-    if(e.key==='ArrowRight') go(cur+1);
-    if(e.key==='ArrowLeft') go(cur-1);
-    if(e.key==='Escape'){ slides.forEach(function(s){ s.classList.remove('is-open'); });
-      root.classList.remove('is-zoomed'); }
-  });
-  window.addEventListener('resize',function(){ track.scrollLeft=cur*track.clientWidth; });
-})();
-</script>
+      - name: Коммит результата
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pages
+          if git diff --staged --quiet; then
+            echo "Изменений нет"
+          else
+            git commit -m "Пересобраны страницы презентации [skip ci]"
+            git push
+          fi
